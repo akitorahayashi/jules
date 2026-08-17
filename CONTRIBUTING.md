@@ -1,44 +1,48 @@
 # Contributing
 
-This repository is a template for a multi-client Agent Skills plugin whose
-skills are backed by Bun TypeScript scripts. User-facing documentation is in
-[README.md](README.md); this guide covers the development workflow.
+A multi-client Agent Skills plugin for Google Jules. User-facing documentation
+is in [README.md](README.md); this guide covers the development workflow.
 
 ## Scope
 
 This repository owns:
 
-- `plugin/example-plugin/` — the distributed plugin: both client manifests and
-  the shared `skills/` directory
-- `tests/` — process-boundary tests for the skill CLIs
+- `plugin/` — the distributed plugin: both client manifests and the shared
+  `skills/` directory
+- `tests/` — tests for `jules-task-delegation`'s CLI
 - `.claude-plugin/marketplace.json`, `.agents/plugins/marketplace.json` — the
   distribution catalogs
 
-## Runtime constraint
+## Runtime contract
 
-The skill CLIs run on the plugin user's own `bun`. Dependencies are Bun globals
-and `node:` built-in modules only. No package import enters
-`plugin/**/skills/**/scripts/`, and the distributed subtree contains no
-`package.json`, no lockfile, and no `node_modules`, so an installed skill runs
-without an install step. The dependencies declared in `package.json` are
-development tools and never ship as a runtime requirement.
+`plugin/skills/jules-task-delegation/scripts/create-session.ts` runs on the
+plugin user's own `bun`. Dependencies are Bun globals and `node:` built-in
+modules only — no package import enters `plugin/**/scripts/`, and the
+distributed subtree contains no `package.json`, no lockfile, and no
+`node_modules`, so an installed skill runs without an install step.
 
 ## Environment
 
-Development uses [Bun](https://bun.sh). The Bun version is fixed by the
-`packageManager` field in `package.json`. `bun install` syncs the development
-tools into `node_modules` and installs the husky hooks through the `prepare`
-script.
+Development dependencies are managed with [pnpm](https://pnpm.io):
+`pnpm install` syncs Biome, TypeScript, `@types/bun`, and husky into
+`node_modules`, and installs the husky hooks through the `prepare` script.
+This installs nothing into the distributed `plugin/` subtree.
+
+Running the test suite and the CLI itself additionally requires
+[Bun](https://bun.sh) on the development machine — pnpm manages
+devDependencies, but does not substitute for the Bun runtime that `bun test`
+and `create-session.ts` need to execute.
 
 ## Tasks
 
-- `bun test` runs the test suite.
-- `bun run fix` applies Biome formatting and autofixes.
-- `bun run check` runs Biome in check mode and `tsc --noEmit`.
+- `bun test` (or `pnpm test`) runs the test suite.
+- `pnpm run fix` applies Biome formatting and autofixes.
+- `pnpm run check` runs Biome in check mode and `tsc --noEmit`.
 
-`bun run fix` is the pass to run before committing; `bun run check` is the
-verification pass. Run `bun run fix` before `bun run check`. The husky hooks
-enforce this: `pre-commit` runs `bun run check` and `pre-push` runs `bun test`.
+`pnpm run fix` is the pass to run before committing; `pnpm run check` is the
+verification pass. Run `pnpm run fix` before `pnpm run check`. The husky hooks
+enforce this: `pre-commit` runs `pnpm run check` and `pre-push` runs
+`pnpm test`.
 
 ## Code style
 
@@ -47,54 +51,44 @@ TypeScript over the plugin skills and `tests`, under `strict` with
 `noUncheckedIndexedAccess`. Scripts are fully type-annotated at their
 boundaries, and `tsc --noEmit` is expected to report no problems.
 
-Avoid silent fallbacks. Configuration and runtime problems surface as explicit
-errors carrying a user-actionable `action`, not a degraded result.
+Avoid silent fallbacks. Configuration and runtime problems surface as
+explicit errors, not a degraded result.
 
 ## Tests
 
-Tests live outside the skills, at the repository root under `tests/`, as Bun
-test files split by skill into directories. They assert each CLI's process
-boundary (exit code, the stdout and stderr JSON, any written files), not
-internal functions.
+Tests live outside the skills, at the repository root under `tests/`.
 
-- `tests/cli-runner.ts` provides a subprocess runner that invokes a skill CLI
-  with the given arguments, plus the binding for the example CLI.
-- `tests/example-skill/` verifies the example CLI by concern: `summary.test.ts`
-  covers the reported shape and the empty-result path, `errors.test.ts` covers
-  non-numeric arguments, and `usage.test.ts` covers `--help`.
+- `tests/jules-task-delegation/create-session.test.ts` imports
+  `create-session.ts`'s exported functions directly rather than driving it as
+  a subprocess, because `createJulesSession` takes an injectable `fetchImpl`
+  and `repoDetector` specifically so HTTP responses, timeouts, and git-remote
+  detection can be simulated without a real network call or a real repo. It
+  covers `parseGithubRepo`'s HTTPS/SSH parsing, `parseCliOptions`'s mutually
+  exclusive `--prompt`/`--prompt-file` rejection, `main`'s missing-API-key
+  rejection, a mapped success response, an upstream automation-mode rejection,
+  a malformed success payload, and a request timeout.
 
-Enumerate matrix cases with `test.each`, and keep any temporary state in a
-directory created under the runtime's temporary directory and removed in a
-`finally` block. Tests assert behavior observable at the CLI boundary and do not
-fix internal composition.
+Tests assert behavior observable through these exported seams, not internal
+composition.
 
 ## CLI contract
 
-Each skill CLI prints one JSON document on stdout and uses meaningful exit
-codes. The convention across the template is exit 0 for an affirmative or
-successful result, 1 for a valid request with a negative or empty result, and 2
-for a configuration or runtime error. On exit 2, the CLI prints JSON to stderr
-carrying an `action` describing what the user should fix.
-
-The example CLI,
-`plugin/example-plugin/skills/example-skill/scripts/summarize.ts`, takes a list
-of numbers as arguments and reports their count, sum, min, max, and mean.
-
-Scripts that accept options parse them with `parseArgs` from `node:util`. The
-example CLI reads its positional arguments from `Bun.argv` directly, because
-`parseArgs` rejects a negative number such as `-1.5` as an unknown short option.
+`create-session.ts` is not JSON-on-stdout with a 0/1/2 exit-code convention —
+it prints human-readable progress and result lines (`Creating session...`,
+then `ID:`/`Name:`/`URL:`) and exits 0 on success. Any failure — a usage
+error, a missing `JULES_API_KEY`, an HTTP error from the Jules API, a request
+timeout — throws a `JulesScriptError` (or propagates the underlying error),
+which the CLI entry point catches, printing `Error: <message>` to stderr and
+exiting 1.
 
 ## Distribution boundary
 
-The distributed plugin is whatever `source` in
-[.claude-plugin/marketplace.json](.claude-plugin/marketplace.json) points to. It
-is a `git-subdir` source scoped to `plugin/example-plugin`, which holds only both
-manifests and `skills/`. Claude Code and Codex both read this marketplace and
-sparse-clone that subtree, so the development assets at the repository root
-(`tests/`, `package.json`, `biome.json`, `tsconfig.json`, `bunfig.toml`,
-`bun.lock`, `.husky/`) are excluded from the installed plugin.
+The repository root is the marketplace root for Claude Code and Codex. The
+marketplace manifests at `.claude-plugin/marketplace.json` and
+`.agents/plugins/marketplace.json` point to `./plugin`.
 
-Component directories such as `skills/` live at the subtree root, not inside
-`plugin/example-plugin/.claude-plugin/` or `.codex-plugin/`, or the clients
-would not load them. Keep development assets at the repository root and leave
-only the manifests and `skills/` inside `plugin/example-plugin/`.
+The `plugin/` directory is the plugin root. Component directories such as
+`skills/` live beside the plugin manifests `.claude-plugin/plugin.json` and
+`.codex-plugin/plugin.json`; clients do not load components nested inside
+either client-manifest directory. Development assets at the repository root
+support development and do not enter the installable plugin.

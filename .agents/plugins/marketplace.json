@@ -1,14 +1,14 @@
 {
-  "name": "example-marketplace",
+  "name": "jules",
   "interface": {
-    "displayName": "Example Marketplace"
+    "displayName": "Jules"
   },
   "plugins": [
     {
-      "name": "example-plugin",
+      "name": "jules",
       "source": {
         "source": "local",
-        "path": "./plugin/example-plugin"
+        "path": "./plugin"
       },
       "policy": {
         "installation": "AVAILABLE",
