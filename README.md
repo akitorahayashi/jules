@@ -1,145 +1,117 @@
-# skills-plugin-bun
+# jules
 
-A template for packaging Agent Skills that are backed by Bun TypeScript
-scripts, as a plugin that installs natively on Claude Code and Codex CLI. One
-repository is one plugin holding one or more related skills, distributed from a
-single shared `skills/` directory with one small manifest per client. Each skill
-drives a dependency-free TypeScript CLI that runs on the user's own `bun` and
-prints one JSON document.
+A GitHub-installable Agent Skills plugin for working with Google Jules, an
+asynchronous cloud coding agent. The repository root is the marketplace root
+for Claude Code and Codex, and the `plugin/` directory is the plugin root for
+both.
 
-The plugin lives in the `plugin/example-plugin/` subtree so that development
-assets at the repository root stay out of what gets installed.
+One skill is guidance-only; the other drives a dependency-free Bun TypeScript
+CLI, so a plugin user needs no `npm install` step and no project files added
+to the repository they are working in.
 
 ## Structure
 
 ```text
-skills-plugin-bun/
-├── plugin/
-│   └── example-plugin/                       # the distributed plugin (only this subtree installs)
-│       ├── .claude-plugin/plugin.json        # Claude Code manifest
-│       ├── .codex-plugin/plugin.json         # Codex manifest
-│       └── skills/
-│           └── example-skill/
-│               ├── SKILL.md                   # name comes from frontmatter
-│               └── scripts/summarize.ts       # dependency-free CLI, one JSON document, exit codes 0/1/2
+jules/
 ├── .claude-plugin/
-│   └── marketplace.json                       # Claude Code catalog; git-subdir source -> plugin/example-plugin
-├── .agents/plugins/
-│   └── marketplace.json                       # Codex catalog; local source -> ./plugin/example-plugin
-├── tests/
-│   ├── cli-runner.ts                          # subprocess runner for a skill CLI
-│   └── example-skill/                         # process-boundary tests, split by concern
-├── package.json                               # development tools only (biome / typescript / husky)
-├── biome.json                                 # formatter and linter configuration
-├── tsconfig.json                              # typecheck over the plugin skills and tests
-├── bunfig.toml                                # test runner configuration
-├── bun.lock                                   # development dependency lock
-├── .husky/                                    # pre-commit check, pre-push test
+│   └── marketplace.json                 # Claude Code marketplace manifest
+├── .agents/
+│   └── plugins/
+│       └── marketplace.json             # Codex marketplace manifest
+├── plugin/
+│   ├── skills/
+│   │   ├── google-jules/
+│   │   │   └── SKILL.md                 # fit/non-fit guidance, no CLI
+│   │   └── jules-task-delegation/
+│   │       ├── SKILL.md                 # drives create-session.ts
+│   │       ├── agents/openai.yaml       # Codex invocation policy
+│   │       └── scripts/create-session.ts
+│   ├── .claude-plugin/plugin.json       # Claude Code manifest
+│   └── .codex-plugin/plugin.json        # Codex manifest
+├── tests/                               # process- and unit-level tests
+├── package.json                         # development tools only
+├── biome.json / tsconfig.json           # format, lint, typecheck
+├── bunfig.toml                          # test runner configuration
+├── pnpm-lock.yaml
+├── .husky/
 ├── README.md
-├── AGENTS.md
 └── CONTRIBUTING.md
 ```
 
-`skills/` is shared across both clients. Each manifest carries only that
-client's identity; the skill body is never duplicated. Component directories
-(`skills/`, and later `hooks/`, `agents/`, `commands/`, `.mcp.json`) live at the
-plugin-subtree root. Only `plugin.json` belongs inside `.claude-plugin/` and
-`.codex-plugin/`.
+The marketplace manifests expose the plugin in this repository by pointing to
+`./plugin`. They are installation indexes only; the plugin body is not
+duplicated under a `plugins/` directory.
+
+`plugin/skills/` is shared across both clients. Each manifest carries only
+that client's identity; the skill body is never duplicated. Component
+directories (`skills/`, and later `hooks/`, `agents/`, `commands/`,
+`.mcp.json`) live at the plugin root. Only `plugin.json` belongs inside
+`.claude-plugin/` and `.codex-plugin/`.
 
 ## What each manifest requires
 
-Each manifest lives inside `plugin/example-plugin/`.
-
-- Claude Code — skills under `skills/` are auto-discovered, so `plugin.json`
-  needs no `skills` field. Metadata like `author`, `homepage`, `repository`,
-  `license`, and `keywords` is optional.
+- Claude Code — skills under `plugin/skills/` are auto-discovered, so
+  `.claude-plugin/plugin.json` needs no `skills` field.
 - Codex — `.codex-plugin/plugin.json` declares `"skills": "./skills/"` and
-  accepts the same optional metadata plus an `interface` block for
-  install-surface presentation.
+  accepts an `interface` block for install-surface presentation.
 
-## The example skill
+## The skills
 
-`plugin/example-plugin/skills/example-skill` demonstrates the conventions every
-skill in this template follows. Its CLI takes a list of numbers as arguments and
-prints their count, sum, min, max, and mean as one JSON document. It shows the
-whole contract: dependency-free TypeScript, explicit validation with an
-actionable error, and exit codes 0 (a result), 1 (no numbers given), and 2 (a
-non-numeric argument, reported as JSON on stderr with an `action`). A skill
-needs only a `SKILL.md` and, here, a `scripts/` directory; optional
-`references/` and `assets/` directories are supported when a skill needs them.
-Rename the directory and replace the skill with your own.
+- `plugin/skills/google-jules` — reference model for deciding whether a task
+  fits Jules: the session/source/activity concepts, fit and non-fit criteria,
+  branch and automation-mode behavior. No scripts; guidance only.
+- `plugin/skills/jules-task-delegation` — creates a Jules API session.
+  `scripts/create-session.ts` parses CLI options, detects the GitHub repo from
+  `remote.origin.url` when `--repo` is omitted, and calls the Jules API to
+  open a session. `agents/openai.yaml` mirrors the `SKILL.md` frontmatter's
+  `disable-model-invocation: true` for Codex, restricting the skill to
+  explicit user invocation.
 
 ## Runtime and development separation
 
-The skill CLIs run on the plugin user's own `bun` with no runtime dependency.
-Every script under `skills/**/scripts/` imports only Bun globals and `node:`
-built-in modules, so a skill works the moment it is installed, with no
-`bun install` step and no `node_modules` in the distributed subtree. The
-dependencies in `package.json` are development tools (Biome, TypeScript,
-husky); they are never installed into the runtime and never ship as a plugin
-requirement.
+`create-session.ts` runs on the plugin user's own `bun`, with no runtime
+dependency — only Bun globals and `node:` built-in modules. The distributed
+`plugin/` subtree carries no `package.json`, lockfile, or `node_modules`.
 
-## Distribution boundary
-
-The distributed plugin is the `plugin/example-plugin/` subtree, selected by the
-`git-subdir` source in `.claude-plugin/marketplace.json`. Claude Code and Codex
-both read this marketplace and sparse-clone only that subtree, so the
-development assets at the repository root (`tests/`, `package.json`,
-`biome.json`, `tsconfig.json`, `bunfig.toml`, `bun.lock`, `.husky/`) are never
-part of the installed plugin. Component directories such as `skills/` live at
-the subtree root, not inside its `.claude-plugin/`, or the clients would not
-load them.
+Development dependencies (Biome, TypeScript, husky, `@types/bun`) are managed
+with pnpm, installed via `pnpm install`. This is a separate concern from the
+Bun runtime: pnpm never installs anything into the distributed plugin, and
+Bun is still required on the development machine to run `bun test` and to
+exercise the CLI itself.
 
 ## Develop
 
-Development uses [Bun](https://bun.sh). `bun run fix` applies formatting and
-autofixes; `bun run check` runs Biome and `tsc --noEmit`; `bun test` runs the
-test suite. Run `bun run fix` before `bun run check`. See
-[CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow and the CLI contract.
+Development uses [pnpm](https://pnpm.io) for dependencies and
+[Bun](https://bun.sh) as the runtime. `pnpm run fix` applies formatting and
+autofixes; `pnpm run check` runs Biome and `tsc --noEmit`; `bun test` (or
+`pnpm test`) runs the test suite. Run `pnpm run fix` before `pnpm run check`.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow and the CLI
+contract.
 
-## Customize
+## Validate
 
-1. Rename `plugin/example-plugin/` to your plugin name, and update the `path` in
-   `.claude-plugin/marketplace.json` and `.agents/plugins/marketplace.json` to
-   match. Rename `plugin/<name>/skills/example-skill/` to your skill's name and
-   rewrite its `SKILL.md`. The `name` frontmatter sets the invocation name; the
-   `description` frontmatter is the sentence the agent reads to decide when to
-   use the skill, so make it a specific trigger. Replace the CLI under
-   `scripts/` with your own, and add optional `references/` and `assets/`
-   directories if your skill needs them.
-2. Replace `example-plugin` with your plugin name (kebab-case) in the two plugin
-   manifests, and `example-marketplace` / `your-name` / the git-subdir `url` in
-   the two marketplace manifests.
-3. Add more skills as sibling directories under `plugin/<name>/skills/`, and add
-   tests under `tests/`. Group related skills in one plugin rather than
-   splitting one plugin per skill.
-4. Validate before distributing:
-
-   ```bash
-   claude plugin validate .
-   claude plugin validate ./plugin/example-plugin
-   ```
+```bash
+claude plugin validate .
+claude plugin validate ./plugin
+```
 
 ## Install
 
-Replace the repository URL and the `plugin@marketplace` names with your own.
+The repository root is the marketplace root for GitHub distribution.
 
 ### Claude Code
 
 ```bash
-claude plugin marketplace add git@github.com:your-org/your-repo.git
-claude plugin install example-plugin@example-marketplace
+claude plugin marketplace add akitorahayashi/jules
+claude plugin install jules@jules
 ```
 
-Public repositories can use the HTTPS URL instead of the SSH one. The
-`git-subdir` source sparse-clones only `plugin/example-plugin`.
+For local development, Claude Code can load the plugin root for the current
+session with `claude --plugin-dir ./plugin`.
 
 ### Codex
 
 ```bash
-codex plugin marketplace add git@github.com:your-org/your-repo.git
-codex plugin install example-plugin@example-marketplace
+codex plugin marketplace add akitorahayashi/jules
+codex plugin add jules@jules
 ```
-
-Alternatively, run `/plugins` in the Codex TUI to browse the registered
-marketplaces and install interactively.

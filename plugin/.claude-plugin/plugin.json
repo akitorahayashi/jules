@@ -1,0 +1,8 @@
+{
+  "name": "jules",
+  "version": "0.1.0",
+  "description": "Evaluates whether work fits Google Jules and delegates coding tasks to it through the Jules API.",
+  "author": {
+    "name": "akitorahayashi"
+  }
+}
