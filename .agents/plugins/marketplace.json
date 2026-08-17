@@ -1,0 +1,20 @@
+{
+  "name": "example-marketplace",
+  "interface": {
+    "displayName": "Example Marketplace"
+  },
+  "plugins": [
+    {
+      "name": "example-plugin",
+      "source": {
+        "source": "local",
+        "path": "./plugin/example-plugin"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

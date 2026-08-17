@@ -1,0 +1,18 @@
+{
+  "name": "example-marketplace",
+  "description": "Replace this with your marketplace's description.",
+  "owner": {
+    "name": "your-name"
+  },
+  "plugins": [
+    {
+      "name": "example-plugin",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/your-org/your-repo.git",
+        "path": "plugin/example-plugin"
+      },
+      "description": "Replace this with your plugin's description."
+    }
+  ]
+}
