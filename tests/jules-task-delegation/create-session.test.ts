@@ -39,9 +39,9 @@ test('main rejects a missing API key before any network request', async () => {
 });
 
 test('createJulesSession maps a valid success response', async () => {
-  const calls: string[] = [];
-  const fetchImpl: Fetch = async (url) => {
-    calls.push(String(url));
+  const calls: { url: string; init: RequestInit | undefined }[] = [];
+  const fetchImpl: Fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
     return calls.length === 1
       ? jsonResponse({})
       : jsonResponse({ id: '1', name: 'sessions/1', url: 'https://jules/1' });
@@ -64,7 +64,23 @@ test('createJulesSession maps a valid success response', async () => {
     name: 'sessions/1',
     url: 'https://jules/1',
   });
-  expect(calls).toHaveLength(2);
+
+  // The source resource name and the request payload are the API contract this
+  // script is pinned to; counting the calls alone would let either drift.
+  expect(calls.map(({ url }) => url)).toEqual([
+    'https://jules.googleapis.com/v1alpha/sources/github/owner/repo',
+    'https://jules.googleapis.com/v1alpha/sessions',
+  ]);
+  expect(calls[1]?.init?.method).toBe('POST');
+  expect(JSON.parse(String(calls[1]?.init?.body))).toEqual({
+    prompt: 'do work',
+    sourceContext: {
+      source: 'sources/github/owner/repo',
+      githubRepoContext: { startingBranch: 'main' },
+    },
+    requirePlanApproval: false,
+    automationMode: 'AUTO_CREATE_PR',
+  });
 });
 
 test('createJulesSession reports upstream automation-mode rejection', async () => {

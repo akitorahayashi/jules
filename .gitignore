@@ -1,5 +1,10 @@
-# dependencies (bun install)
+# dependencies (pnpm install)
 node_modules
+
+# credentials
+.env
+.env.*
+!.env.example
 
 # code coverage
 coverage

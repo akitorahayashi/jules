@@ -17,6 +17,8 @@ Use the starting branch supplied by the user. When the user has not supplied one
 
 The Jules API key is read from `JULES_API_KEY`. When it is not already set, ask the user to create `.env` in the current working directory with `JULES_API_KEY=<key>`, then source that file for the session creation command.
 
+Confirm `.env` is ignored by the target repository before writing the key into it. Jules commits to that repository, so an unignored `.env` is a credential that leaves with the pull request.
+
 ## Create Session
 
 Resolve the helper script relative to this `SKILL.md` file, not relative to the repository being delegated. Run it from the target repository so it can detect `remote.origin.url`.
